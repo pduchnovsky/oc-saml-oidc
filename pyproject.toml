@@ -22,10 +22,10 @@ classifiers = [
 ]
 dependencies = [
   "cryptography>=43.0,<44.0",
-  "gunicorn>=23.0",
   "pyOpenSSL>=24.2,<24.3",
   "PyYAML>=6.0",
   "SATOSA==8.5.1",
+  "waitress>=3.0.2",
 ]
 
 [dependency-groups]

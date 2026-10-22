@@ -8,10 +8,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-
 
 @dataclass(frozen=True, slots=True)
 class CertificateBundle:
@@ -44,6 +40,10 @@ def ensure_self_signed_certificate(
 
     if cert_path.exists() and key_path.exists():
         return CertificateBundle(cert_path=cert_path, key_path=key_path)
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
 
     cert_path.parent.mkdir(parents=True, exist_ok=True)
     key_path.parent.mkdir(parents=True, exist_ok=True)

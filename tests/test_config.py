@@ -43,6 +43,7 @@ def test_from_env_derives_entity_ids_and_relay_state(tmp_path: Path) -> None:
     assert config.omada_public_base_url == "https://omada.example.com"
     assert config.oidc_redirect_uri == "https://bridge.example.com/oidc"
     assert config.relay_state == "cmVzb3VyY2UtaWRfb21hZGEtaWQ="
+    assert config.satosa_workers == 1
     assert config.omada_upstreams == (
         UpstreamConfig(
             "https://controller-1.internal:443", "https://controller-1.internal:443/omada-id"

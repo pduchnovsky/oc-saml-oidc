@@ -93,7 +93,7 @@ class BridgeConfig:
     internal_launcher_port: int = DEFAULT_INTERNAL_LAUNCHER_PORT
     internal_proxy_port: int = DEFAULT_INTERNAL_PROXY_PORT
     internal_satosa_port: int = DEFAULT_INTERNAL_SATOSA_PORT
-    satosa_workers: int = 2
+    satosa_workers: int = 1
     health_timeout_seconds: float = 3.0
 
     def validate(self) -> None:
@@ -224,7 +224,7 @@ class BridgeConfig:
             internal_satosa_port=int(
                 source.get("INTERNAL_SATOSA_PORT", str(DEFAULT_INTERNAL_SATOSA_PORT))
             ),
-            satosa_workers=int(source.get("SATOSA_WORKERS", "2")),
+            satosa_workers=int(source.get("SATOSA_WORKERS", "1")),
             health_timeout_seconds=float(source.get("HEALTH_TIMEOUT_SECONDS", "3")),
         )
         config.validate()
@@ -273,7 +273,7 @@ class BridgeConfig:
             internal_satosa_port=int(
                 mapping.get("internal_satosa_port", DEFAULT_INTERNAL_SATOSA_PORT)
             ),
-            satosa_workers=int(mapping.get("satosa_workers", 2)),
+            satosa_workers=int(mapping.get("satosa_workers", 1)),
             health_timeout_seconds=float(mapping.get("health_timeout_seconds", 3)),
         )
         config.validate()

@@ -9,12 +9,16 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+from threading import Event, Thread
 from urllib.parse import urlsplit
 
 import yaml
 
+from omada_saml_oidc.acs_proxy import run_proxy
 from omada_saml_oidc.certs import CertificateBundle, ensure_self_signed_certificate
 from omada_saml_oidc.config import BridgeConfig, ConfigError
+from omada_saml_oidc.launcher import default_health_check, run_launcher
+from omada_saml_oidc.router import run_router
 from omada_saml_oidc.satosa_config import build_satosa_artifacts
 from omada_saml_oidc.secrets import ensure_persisted_secret
 
@@ -28,9 +32,6 @@ class PreparedRuntime:
     key_path: Path
     bridge_config_path: Path
     satosa_config_path: Path
-    launcher_command: tuple[str, ...]
-    proxy_command: tuple[str, ...]
-    router_command: tuple[str, ...]
     satosa_command: tuple[str, ...]
 
 
@@ -76,23 +77,14 @@ def prepare_runtime(config: BridgeConfig) -> PreparedRuntime:
         key_path=config.frontend_key_path,
         bridge_config_path=config.bridge_config_path,
         satosa_config_path=config.satosa_config_path,
-        launcher_command=(sys.executable, "-m", "omada_saml_oidc.launcher"),
-        proxy_command=(sys.executable, "-m", "omada_saml_oidc.acs_proxy"),
-        router_command=(sys.executable, "-m", "omada_saml_oidc.router"),
         satosa_command=(
             sys.executable,
             "-m",
-            "gunicorn",
-            "--bind",
-            f"127.0.0.1:{config.internal_satosa_port}",
-            "--workers",
+            "omada_saml_oidc.satosa_server",
+            "--port",
+            str(config.internal_satosa_port),
+            "--threads",
             str(config.satosa_workers),
-            "--access-logfile",
-            "-",
-            "--error-logfile",
-            "-",
-            "--forwarded-allow-ips=*",
-            "satosa.wsgi:app",
         ),
     )
 
@@ -116,12 +108,21 @@ def run_supervisor(config: BridgeConfig) -> int:
             "SATOSA_STATE_ENCRYPTION_KEY": runtime.secret_path.read_text().strip(),
         }
     )
-    processes = [
-        subprocess.Popen(runtime.launcher_command, env=child_env),
-        subprocess.Popen(runtime.proxy_command, env=child_env),
-        subprocess.Popen(runtime.satosa_command, env=child_env),
-        subprocess.Popen(runtime.router_command, env=child_env),
-    ]
+    service_threads = (
+        Thread(
+            target=run_launcher,
+            args=(config, default_health_check),
+            name="launcher",
+            daemon=True,
+        ),
+        Thread(target=run_proxy, args=(config,), name="acs-proxy", daemon=True),
+        Thread(target=run_router, args=(config,), name="router", daemon=True),
+    )
+    for service_thread in service_threads:
+        service_thread.start()
+
+    processes = [subprocess.Popen(runtime.satosa_command, env=child_env)]
+    shutdown_requested = Event()
 
     def terminate(*_args: object) -> None:
         """Terminate every running child process.
@@ -133,20 +134,25 @@ def run_supervisor(config: BridgeConfig) -> int:
         for child in processes:
             if child.poll() is None:
                 child.terminate()
+        shutdown_requested.set()
 
     signal.signal(signal.SIGTERM, terminate)
     signal.signal(signal.SIGINT, terminate)
 
     exit_code = 0
     try:
-        while True:
+        while not shutdown_requested.is_set():
             for child in processes:
                 result = child.poll()
                 if result is not None:
                     exit_code = result
                     terminate()
                     return exit_code
-            signal.pause()
+            if any(not service_thread.is_alive() for service_thread in service_threads):
+                exit_code = 1
+                terminate()
+                return exit_code
+            shutdown_requested.wait(timeout=0.5)
     finally:
         terminate()
         for child in processes:
