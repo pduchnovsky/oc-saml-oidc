@@ -24,7 +24,7 @@ dependencies = [
   "cryptography>=43.0,<44.0",
   "pyOpenSSL>=24.2,<26.5",
   "PyYAML>=6.0",
-  "SATOSA==8.5.1",
+  "SATOSA==8.6.0",
   "waitress>=3.0.2",
 ]
 
