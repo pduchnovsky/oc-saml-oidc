@@ -108,4 +108,4 @@ Use nginx when you want the routing rules in one place and prefer explicit serve
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

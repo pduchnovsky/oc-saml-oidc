@@ -14,7 +14,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY pyproject.toml README.md LICENSE ./
+COPY pyproject.toml README.md LICENSE THIRD_PARTY_NOTICES.md ./
 COPY src ./src
 
 ARG PACKAGE_VERSION
@@ -22,6 +22,8 @@ RUN if [ -n "$PACKAGE_VERSION" ]; then \
         python -c 'import os, re; from pathlib import Path; path = Path("src/omada_saml_oidc/__init__.py"); source = path.read_text(); updated, count = re.subn(r"^__version__ = .+$", "__version__ = \"" + os.environ["PACKAGE_VERSION"] + "\"", source, count=1, flags=re.MULTILINE); assert count == 1; path.write_text(updated)'; \
     fi \
     && pip install --no-cache-dir .
+
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/doc/omada-saml-oidc/
 
 VOLUME ["/data"]
 EXPOSE 8080
