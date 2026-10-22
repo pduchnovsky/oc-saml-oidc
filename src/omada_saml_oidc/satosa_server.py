@@ -6,7 +6,7 @@ import argparse
 from collections.abc import Callable, Sequence
 import sys
 
-from waitress import create_server as create_waitress_server
+from waitress.server import create_server as create_waitress_server
 
 
 def create_satosa_server(port: int, threads: int) -> tuple[Callable[[], None], Callable[[], None]]:
