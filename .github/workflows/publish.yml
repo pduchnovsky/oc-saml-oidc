@@ -1,4 +1,4 @@
-name: Publish Docker Image on Release
+name: Publish Docker image
 
 on:
   release:
@@ -11,65 +11,100 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 jobs:
-  publish:
-    if: ${{ github.event_name != 'release' || !github.event.release.draft }}
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.metadata.outputs.image_tag }}
+      package_version: ${{ steps.metadata.outputs.package_version }}
     env:
-      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/omada-saml-oidc
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      INPUT_TAG: ${{ inputs.tag_name }}
+      EVENT_NAME: ${{ github.event_name }}
+    steps:
+      - name: Validate image tag
+        id: metadata
+        run: |
+          image_tag="${RELEASE_TAG:-$INPUT_TAG}"
+          test -n "$image_tag"
+          package_version=""
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            package_version="$RELEASE_TAG"
+            if ! [[ "$package_version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+              echo "Release tag must be a semantic version: $package_version" >&2
+              exit 1
+            fi
+          fi
+          printf 'image_tag=%s\n' "$image_tag" >> "$GITHUB_OUTPUT"
+          printf 'package_version=%s\n' "$package_version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
+      IMAGE_TAG: ${{ needs.prepare.outputs.image_tag }}
+      PACKAGE_VERSION: ${{ needs.prepare.outputs.package_version }}
+      PLATFORM: ${{ matrix.platform }}
+      ARCHITECTURE: ${{ matrix.architecture }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Update Version in __init__.py
-        if: ${{ github.event_name == 'release' && github.event.release.draft == false }}
-        run: |
-          sed -i 's/^__version__ = ".*"/__version__ = "${{ github.event.release.tag_name }}"/' ./src/omada_saml_oidc/__init__.py
-
-      - name: Commit & Push Version Changes
-        if: ${{ github.event_name == 'release' && github.event.release.draft == false && github.event.release.prerelease == false  }}
-        uses: stefanzweifel/git-auto-commit-action@v7
-        with:
-          branch: ${{ github.event.release.target_commitish }}
-          commit_message: 'Updating to version ${{ github.event.release.tag_name }} [skip ci]'
-
-      - name: Update Release with Version Changes Commit
-        if: ${{ github.event_name == 'release' && github.event.release.draft == false && github.event.release.prerelease == false  }}
-        run: |
-          git tag -f ${{ github.event.release.tag_name }}
-          git push -f origin ${{ github.event.release.tag_name }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Generate Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}},value=${{ github.event_name == 'release' && github.event.release.tag_name || '0.0.0' }},enable=${{ github.event_name == 'release' }}
-            type=raw,value=${{ inputs.tag_name }},enable=${{ github.event_name == 'workflow_dispatch' }}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' && !github.event.release.draft && !github.event.release.prerelease }}
-
       - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
-      - name: Build and publish image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - name: Build and publish architecture image
+        run: |
+          docker buildx build \
+            --platform "$PLATFORM" \
+            --build-arg "PACKAGE_VERSION=$PACKAGE_VERSION" \
+            --tag "$IMAGE_NAME:$IMAGE_TAG-$ARCHITECTURE" \
+            --push .
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
+      IMAGE_TAG: ${{ needs.prepare.outputs.image_tag }}
+      IS_STABLE_RELEASE: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
+    steps:
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish multi-architecture tags
+        run: |
+          docker buildx imagetools create \
+            --tag "$IMAGE_NAME:$IMAGE_TAG" \
+            "$IMAGE_NAME:$IMAGE_TAG-amd64" \
+            "$IMAGE_NAME:$IMAGE_TAG-arm64"
+          if [[ "$IS_STABLE_RELEASE" == "true" ]]; then
+            docker buildx imagetools create \
+              --tag "$IMAGE_NAME:latest" \
+              "$IMAGE_NAME:$IMAGE_TAG-amd64" \
+              "$IMAGE_NAME:$IMAGE_TAG-arm64"
+          fi

@@ -2,6 +2,8 @@
 
 Omada SAML to OIDC Bridge lets an Omada Controller accept OIDC login through SATOSA plus a small amount of custom routing and rewrite code. The public browser flow stays on OIDC, while the bridge turns that login into the SAML traffic Omada expects.
 
+It is designed for self-hosted and homelab deployments, with SATOSA and the bridge services running in one Python process and SATOSA using a single worker thread by default.
+
 ## How it works
 
 1. The browser goes to the public Omada URL.
@@ -31,10 +33,10 @@ Do not point `OMADA_UPSTREAM_BASES` at the public Omada hostname. The bridge use
 
 ## Docker Compose
 
-The compose example in `examples/docker-compose.yml` shows the bridge container. Copy `omada-saml-oidc.env.example` to `omada-saml-oidc.env`, fill in the Omada and OIDC values, and keep that file private.
+The compose example in `examples/docker-compose.yml` shows the bridge container. Fill in the placeholders in `examples/omada-saml-oidc.env` with your Omada and OIDC values, and do not commit real credentials.
 
 ```yaml
-image: ghcr.io/snuffy2/omada-saml-oidc:latest
+image: ghcr.io/pduchnovsky/oc-saml-oidc:latest
 ```
 
 The examples use generic hostnames:
@@ -97,7 +99,7 @@ Use nginx when you want the routing rules in one place and prefer explicit serve
 
 ## Example files
 
-- `omada-saml-oidc.env.example`
+- `examples/omada-saml-oidc.env`
 - `examples/docker-compose.yml`
 - `examples/traefik-pocket-id.yml`
 - `examples/traefik-authelia.yml`

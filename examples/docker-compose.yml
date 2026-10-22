@@ -1,10 +1,10 @@
 services:
   omada-saml-oidc:
-    image: ghcr.io/snuffy2/omada-saml-oidc:latest
+    image: ghcr.io/pduchnovsky/oc-saml-oidc:latest
     container_name: omada-saml-oidc
     restart: unless-stopped
     env_file:
-      - omada-saml-oidc.env
+      - ./omada-saml-oidc.env
     ports:
       - "8080:8080"
     volumes:

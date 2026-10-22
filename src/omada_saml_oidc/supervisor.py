@@ -1,4 +1,4 @@
-"""Prepare runtime artifacts and supervise all bridge child services."""
+"""Prepare runtime artifacts and supervise all bridge services."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import signal
-import subprocess
 import sys
 from threading import Event, Thread
 from urllib.parse import urlsplit
@@ -20,19 +19,19 @@ from omada_saml_oidc.config import BridgeConfig, ConfigError
 from omada_saml_oidc.launcher import default_health_check, run_launcher
 from omada_saml_oidc.router import run_router
 from omada_saml_oidc.satosa_config import build_satosa_artifacts
+from omada_saml_oidc.satosa_server import create_satosa_server
 from omada_saml_oidc.secrets import ensure_persisted_secret
 
 
 @dataclass(frozen=True, slots=True)
 class PreparedRuntime:
-    """Describe generated runtime artifacts and child commands."""
+    """Describe generated runtime artifacts for the bridge services."""
 
     secret_path: Path
     cert_path: Path
     key_path: Path
     bridge_config_path: Path
     satosa_config_path: Path
-    satosa_command: tuple[str, ...]
 
 
 def prepare_runtime(config: BridgeConfig) -> PreparedRuntime:
@@ -42,7 +41,7 @@ def prepare_runtime(config: BridgeConfig) -> PreparedRuntime:
         config: Validated bridge config.
 
     Returns:
-        Runtime file paths and child process commands.
+        Runtime file paths used by the bridge services.
     """
 
     ensure_persisted_secret(
@@ -77,20 +76,11 @@ def prepare_runtime(config: BridgeConfig) -> PreparedRuntime:
         key_path=config.frontend_key_path,
         bridge_config_path=config.bridge_config_path,
         satosa_config_path=config.satosa_config_path,
-        satosa_command=(
-            sys.executable,
-            "-m",
-            "omada_saml_oidc.satosa_server",
-            "--port",
-            str(config.internal_satosa_port),
-            "--threads",
-            str(config.satosa_workers),
-        ),
     )
 
 
 def run_supervisor(config: BridgeConfig) -> int:
-    """Run and monitor all bridge child processes.
+    """Run and monitor all bridge services.
 
     Args:
         config: Validated bridge config.
@@ -100,13 +90,21 @@ def run_supervisor(config: BridgeConfig) -> int:
     """
 
     runtime = prepare_runtime(config)
-    child_env = os.environ.copy()
-    child_env.update(
+    os.environ.update(
         {
             "OMADA_BRIDGE_CONFIG": str(runtime.bridge_config_path),
             "SATOSA_CONFIG": str(runtime.satosa_config_path),
             "SATOSA_STATE_ENCRYPTION_KEY": runtime.secret_path.read_text().strip(),
         }
+    )
+    run_satosa_server, stop_satosa_server = create_satosa_server(
+        config.internal_satosa_port, config.satosa_workers
+    )
+    satosa_thread = Thread(
+        target=run_satosa_server,
+        args=(),
+        name="satosa",
+        daemon=True,
     )
     service_threads = (
         Thread(
@@ -117,37 +115,27 @@ def run_supervisor(config: BridgeConfig) -> int:
         ),
         Thread(target=run_proxy, args=(config,), name="acs-proxy", daemon=True),
         Thread(target=run_router, args=(config,), name="router", daemon=True),
+        satosa_thread,
     )
-    for service_thread in service_threads:
-        service_thread.start()
-
-    processes = [subprocess.Popen(runtime.satosa_command, env=child_env)]
     shutdown_requested = Event()
 
     def terminate(*_args: object) -> None:
-        """Terminate every running child process.
+        """Request shutdown of the bridge services.
 
         Args:
             *_args: Signal handler arguments, ignored.
         """
 
-        for child in processes:
-            if child.poll() is None:
-                child.terminate()
         shutdown_requested.set()
 
     signal.signal(signal.SIGTERM, terminate)
     signal.signal(signal.SIGINT, terminate)
+    for service_thread in service_threads:
+        service_thread.start()
 
     exit_code = 0
     try:
         while not shutdown_requested.is_set():
-            for child in processes:
-                result = child.poll()
-                if result is not None:
-                    exit_code = result
-                    terminate()
-                    return exit_code
             if any(not service_thread.is_alive() for service_thread in service_threads):
                 exit_code = 1
                 terminate()
@@ -155,9 +143,9 @@ def run_supervisor(config: BridgeConfig) -> int:
             shutdown_requested.wait(timeout=0.5)
     finally:
         terminate()
-        for child in processes:
-            if child.poll() is None:
-                child.wait(timeout=10)
+        stop_satosa_server()
+        satosa_thread.join(timeout=7)
+    return exit_code
 
 
 def main(argv: Sequence[str] | None = None) -> int:

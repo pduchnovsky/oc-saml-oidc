@@ -3,20 +3,46 @@ name: Linters
 on:
   pull_request:
   push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  linters:
-    name: Run Linters
+  lint:
+    name: Run linters
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Run prek
-        uses: j178/prek-action@v2
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.14
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install lint tools
+        run: python -m pip install --group lint
+
+      - name: Run Ruff checks
+        run: |
+          ruff check --no-fix src tests
+          ruff format --check src tests
+
+      - name: Run mypy
+        run: mypy --config-file pyproject.toml
+
+      - name: Run codespell
+        run: codespell .
+
+      - name: Validate workflow YAML
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for path in Path(".github/workflows").glob("*.yml"):
+              yaml.safe_load(path.read_text())
+          PY
