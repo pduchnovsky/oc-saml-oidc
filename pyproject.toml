@@ -30,9 +30,11 @@ dependencies = [
 
 [dependency-groups]
 lint = [
+    "waitress",
     "cryptography",
+    "PyYAML",
+    "codespell",
     "mypy",
-    "prek",
     "ruff",
     "types-cffi",
     "types-PyMySQL",
@@ -41,6 +43,7 @@ lint = [
     "types-PyYAML",
     "types-requests",
     "types-setuptools",
+    "types-waitress",
 ]
 pytest = [
     "pytest",
@@ -164,6 +167,7 @@ warn_unreachable = false
 [[tool.mypy.overrides]]
 module = [
   "saml2.*",
+  "satosa.*",
 ]
 ignore_missing_imports = true
 

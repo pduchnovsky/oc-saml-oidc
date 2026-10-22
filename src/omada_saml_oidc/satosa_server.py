@@ -3,10 +3,47 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 import sys
 
-from waitress import serve
+from waitress.server import create_server as create_waitress_server
+
+
+def create_satosa_server(port: int, threads: int) -> tuple[Callable[[], None], Callable[[], None]]:
+    """Create SATOSA's Waitress runner and its cross-thread shutdown callback.
+
+    Args:
+        port: Loopback port for the internal SATOSA endpoint.
+        threads: Waitress request worker count.
+
+    Returns:
+        A function that runs Waitress and a function that closes its listener.
+    """
+
+    from satosa.wsgi import app
+
+    server = create_waitress_server(
+        app,
+        host="127.0.0.1",
+        port=port,
+        threads=threads,
+        url_scheme="https",
+    )
+
+    def run() -> None:
+        """Run Waitress and drain active requests when its loop exits."""
+
+        try:
+            server.run()
+        finally:
+            server.task_dispatcher.shutdown(timeout=5)
+
+    def stop() -> None:
+        """Close the listener and wake the Waitress event loop."""
+
+        server.close()
+
+    return run, stop
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -28,15 +65,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.threads <= 0:
         parser.error("--threads must be positive")
 
-    from satosa.wsgi import app
-
-    serve(
-        app,
-        host="127.0.0.1",
-        port=arguments.port,
-        threads=arguments.threads,
-        url_scheme="https",
-    )
+    run, stop = create_satosa_server(arguments.port, arguments.threads)
+    try:
+        run()
+    finally:
+        stop()
     return 0
 
 

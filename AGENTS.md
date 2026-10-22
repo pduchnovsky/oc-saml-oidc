@@ -39,11 +39,11 @@ This repository packages **Omada SAML to OIDC Bridge** as the `omada-saml-oidc` 
 - Add typing annotations to all functions and classes (including return types).
 - Add or update docstrings for all files, classes and methods, including private methods and nested methods. Method docstrings must follow the Google Style.
 - Preserve existing comments and keep imports at the top of files.
-- Follow existing repository style; run `prek`.
+- Follow existing repository style; run Ruff, mypy, and codespell.
 
 ## Local tooling note
 
-- Use the repo's `prek` and `pytest` commands inside `./.venv`. You must always run these inside `./.venv`.
+- Run Ruff, mypy, codespell, and pytest inside `./.venv`.
 - By default, run the full pytest suite. If running targeted tests, explain why.
 
 ## Error handling & logging
