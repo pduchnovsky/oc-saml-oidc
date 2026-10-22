@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
   "cryptography>=43.0,<44.0",
-  "pyOpenSSL>=24.2,<24.3",
+  "pyOpenSSL>=24.2,<26.5",
   "PyYAML>=6.0",
   "SATOSA==8.5.1",
   "waitress>=3.0.2",
