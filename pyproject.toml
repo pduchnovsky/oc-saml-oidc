@@ -21,7 +21,7 @@ classifiers = [
   "Topic :: System :: Systems Administration :: Authentication/Directory",
 ]
 dependencies = [
-  "cryptography>=43.0,<44.0",
+  "cryptography>=43.0,<51.0",
   "pyOpenSSL>=24.2,<24.3",
   "PyYAML>=6.0",
   "SATOSA==8.5.1",
