@@ -30,8 +30,9 @@ dependencies = [
 
 [dependency-groups]
 lint = [
+    "waitress",
     "cryptography",
-  "codespell",
+    "codespell",
     "mypy",
     "ruff",
     "types-cffi",
@@ -41,7 +42,7 @@ lint = [
     "types-PyYAML",
     "types-requests",
     "types-setuptools",
-    "waitress>=3.0.2",
+    "types-waitress",
 ]
 pytest = [
     "pytest",
