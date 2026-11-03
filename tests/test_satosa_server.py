@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import sys
 from types import ModuleType
+from xml.etree import ElementTree
 
 import pytest
 
@@ -36,6 +37,7 @@ def test_generated_config_initializes_real_satosa(
 
     from satosa.proxy_server import make_app
     from satosa.satosa_config import SATOSAConfig
+    from werkzeug.test import Client
 
     config = BridgeConfig.from_env(valid_env(tmp_path))
     runtime = prepare_runtime(config)
@@ -53,9 +55,12 @@ def test_generated_config_initializes_real_satosa(
 
     app = make_app(satosa_config)
 
-    assert set(app.module_router.frontends) == {"Saml2IDP"}
-    assert set(app.module_router.backends) == {config.oidc_backend_name}
-    assert set(app.module_router.micro_services) == {"OmadaAttributes"}
+    response = Client(app).get("/Saml2IDP/proxy.xml", base_url=config.public_base_url)
+
+    assert response.status_code == 200
+    metadata = ElementTree.fromstring(response.data)
+    assert metadata.tag == "{urn:oasis:names:tc:SAML:2.0:metadata}EntityDescriptor"
+    assert metadata.attrib["entityID"] == f"{config.public_base_url}/Saml2IDP/proxy.xml"
 
 
 def test_main_serves_satosa_on_loopback_with_https_scheme(
