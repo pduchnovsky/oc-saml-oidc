@@ -18,45 +18,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Read Python version from Dockerfile
-        id: python
-        run: |
-          version=$(sed -nE 's/^FROM python:([0-9]+\.[0-9]+)-.*$/\1/p' Dockerfile)
-          test -n "$version"
-          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: ${{ steps.python.outputs.version }}
-          allow-prereleases: true
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Install test dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xmlsec1
-          python -m pip install --group pytest -e .
-
-      - name: Run tests with coverage
-        run: pytest
-
-  image:
-    name: Test Docker runtime
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
       - name: Build image
         run: docker build --tag omada-saml-oidc:test .
 
-      - name: Test real SATOSA startup inside image
+      - name: Run full test suite with coverage inside image
         run: |
           docker run --rm --entrypoint sh \
             --volume "$PWD/tests:/app/tests:ro" \
             omada-saml-oidc:test -c \
-            'command -v xmlsec1 && python -m pip install --group pytest && python -m pytest tests/test_satosa_server.py --no-cov -o cache_dir=/tmp/pytest-cache'
+            'command -v xmlsec1 && python -m pip install --group pytest && python -m pytest -o cache_dir=/tmp/pytest-cache'
