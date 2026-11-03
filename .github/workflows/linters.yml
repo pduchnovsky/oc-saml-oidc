@@ -18,10 +18,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Read Python version from Dockerfile
+        id: python
+        run: |
+          version=$(sed -nE 's/^FROM python:([0-9]+\.[0-9]+)-.*$/\1/p' Dockerfile)
+          test -n "$version"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: 3.14
+          python-version: ${{ steps.python.outputs.version }}
+          allow-prereleases: true
           cache: pip
           cache-dependency-path: pyproject.toml
 

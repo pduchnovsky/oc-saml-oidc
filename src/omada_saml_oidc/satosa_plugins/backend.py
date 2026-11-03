@@ -22,26 +22,7 @@ if TYPE_CHECKING:
             """
 
 else:
-    try:
-        from satosa.backends.openid_connect import OpenIDConnectBackend as _BaseOpenIDConnectBackend
-    except Exception:  # pragma: no cover - exercised only when SATOSA is absent.
-
-        class _BaseOpenIDConnectBackend:
-            """Fallback base class used when SATOSA is not installed."""
-
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                """Reject runtime use when SATOSA is missing.
-
-                Args:
-                    *args: Positional constructor arguments.
-                    **kwargs: Keyword constructor arguments.
-
-                Raises:
-                    RuntimeError: Always raised because SATOSA is unavailable.
-                """
-
-                _ = args, kwargs
-                raise RuntimeError("SATOSA is not installed")
+    from satosa.backends.openid_connect import OpenIDConnectBackend as _BaseOpenIDConnectBackend
 
 
 class PrefixedCallbackOpenIDConnectBackend(_BaseOpenIDConnectBackend):

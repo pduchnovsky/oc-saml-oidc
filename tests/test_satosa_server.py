@@ -2,12 +2,60 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+import shutil
 import sys
 from types import ModuleType
 
 import pytest
 
 from omada_saml_oidc import satosa_server
+from omada_saml_oidc.config import BridgeConfig
+from omada_saml_oidc.supervisor import prepare_runtime
+from tests.test_config import valid_env
+
+
+def test_runtime_plugins_inherit_from_satosa() -> None:
+    """Load real SATOSA dependencies instead of accepting fallback plugin bases."""
+
+    from satosa.backends.base import BackendModule
+    from satosa.frontends.base import FrontendModule
+
+    from omada_saml_oidc.satosa_plugins.backend import PrefixedCallbackOpenIDConnectBackend
+    from omada_saml_oidc.satosa_plugins.frontend import OmadaSAMLFrontend
+
+    assert issubclass(PrefixedCallbackOpenIDConnectBackend, BackendModule)
+    assert issubclass(OmadaSAMLFrontend, FrontendModule)
+
+
+@pytest.mark.skipif(shutil.which("xmlsec1") is None, reason="SAML startup requires xmlsec1")
+def test_generated_config_initializes_real_satosa(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Initialize real plugins and routing using generated artifacts and offline OIDC metadata."""
+
+    from satosa.proxy_server import make_app
+    from satosa.satosa_config import SATOSAConfig
+
+    config = BridgeConfig.from_env(valid_env(tmp_path))
+    runtime = prepare_runtime(config)
+    monkeypatch.setenv("OMADA_BRIDGE_CONFIG", str(runtime.bridge_config_path))
+    monkeypatch.setenv("SATOSA_STATE_ENCRYPTION_KEY", runtime.secret_path.read_text().strip())
+    satosa_config = SATOSAConfig(str(runtime.satosa_config_path))
+    satosa_config["BACKEND_MODULES"][0]["config"]["provider_metadata"] = {
+        "issuer": config.oidc_provider_issuer,
+        "authorization_endpoint": f"{config.oidc_provider_issuer}/authorize",
+        "token_endpoint": f"{config.oidc_provider_issuer}/token",
+        "response_types_supported": ["code"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256"],
+    }
+
+    app = make_app(satosa_config)
+
+    assert set(app.module_router.frontends) == {"Saml2IDP"}
+    assert set(app.module_router.backends) == {config.oidc_backend_name}
+    assert set(app.module_router.micro_services) == {"OmadaAttributes"}
 
 
 def test_main_serves_satosa_on_loopback_with_https_scheme(

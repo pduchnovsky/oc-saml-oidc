@@ -72,13 +72,23 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
-      - name: Build and publish architecture image
+      - name: Build architecture image
         run: |
           docker buildx build \
             --platform "$PLATFORM" \
             --build-arg "PACKAGE_VERSION=$PACKAGE_VERSION" \
             --tag "$IMAGE_NAME:$IMAGE_TAG-$ARCHITECTURE" \
-            --push .
+            --load .
+
+      - name: Test real SATOSA startup before publishing
+        run: |
+          docker run --rm --entrypoint sh \
+            --volume "$PWD/tests:/app/tests:ro" \
+            "$IMAGE_NAME:$IMAGE_TAG-$ARCHITECTURE" -c \
+            'command -v xmlsec1 && python -m pip install --group pytest && python -m pytest tests/test_satosa_server.py --no-cov -o cache_dir=/tmp/pytest-cache'
+
+      - name: Publish tested architecture image
+        run: docker push "$IMAGE_NAME:$IMAGE_TAG-$ARCHITECTURE"
 
   publish:
     needs: [prepare, build]
