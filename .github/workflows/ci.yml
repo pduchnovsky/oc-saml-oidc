@@ -1,4 +1,4 @@
-name: Linters
+name: CI
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   lint:
-    name: Run linters
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -56,3 +56,20 @@ jobs:
           for path in Path(".github/workflows").glob("*.yml"):
               yaml.safe_load(path.read_text())
           PY
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build --tag omada-saml-oidc:test .
+
+      - name: Run full test suite with coverage inside image
+        run: |
+          docker run --rm --entrypoint sh \
+            --volume "$PWD/tests:/app/tests:ro" \
+            omada-saml-oidc:test -c \
+            'command -v xmlsec1 && python -m pip install --group pytest && python -m pytest -o cache_dir=/tmp/pytest-cache'
